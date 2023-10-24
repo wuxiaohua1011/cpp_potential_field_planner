@@ -20,9 +20,9 @@ void p_printMap(std::vector<float> map, uint64_t nx, uint64_t ny)
 
 int main(int, char **)
 {
-    uint64_t nx = 10;
-    uint64_t ny = 10;
-    ROAR::global_planning::PotentialFieldPlanning planner(10, 10);
+    uint64_t nx = 14;
+    uint64_t ny = 14;
+    ROAR::global_planning::PotentialFieldPlanning planner(nx, ny);
 
     // print map before
     std::cout << "Map BEFORE: " << std::endl;
