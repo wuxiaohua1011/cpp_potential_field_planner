@@ -1,4 +1,8 @@
 #include "potential_field_planning.hpp"
+#include <iostream>
+#include <stack>
+#include <map>
+#include <algorithm>
 
 using namespace ROAR::global_planning;
 
@@ -7,7 +11,7 @@ PotentialFieldPlanning::PotentialFieldPlanning(uint64_t nx, uint64_t ny)
     this->nx = nx;
     this->ny = ny;
     this->max_iter = nx * ny;
-    this->map_ = std::make_shared<std::vector<uint8_t>>(nx * ny);
+    this->map_ = std::make_shared<std::vector<float>>(nx * ny);
 }
 
 PotentialFieldPlanning::~PotentialFieldPlanning()
@@ -40,7 +44,7 @@ void PotentialFieldPlanning::setObstacles(std::vector<uint8_t> obstacle_map, uin
     }
 
     // set map
-    map_ = std::make_shared<std::vector<uint8_t>>(obstacle_map);
+    map_ = std::make_shared<std::vector<float>>(std::vector<float>(obstacle_map.begin(), obstacle_map.end()));
 }
 
 bool PotentialFieldPlanning::setStart(std::tuple<uint64_t, uint64_t> start)
@@ -59,15 +63,15 @@ bool PotentialFieldPlanning::setStart(std::tuple<uint64_t, uint64_t> start)
     return true;
 }
 
-ROAR::global_planning::PotentialFieldPlanResult PotentialFieldPlanning::plan(std::tuple<uint64_t, uint64_t> goal, uint64_t max_iter)
+PotentialFieldPlanning::PotentialFieldPlanningResult PotentialFieldPlanning::plan(const PotentialFieldPlanning::PotentialFieldPlanningInput::SharedPtr input)
 {
-    PotentialFieldPlanResult result;
+    PotentialFieldPlanningResult result;
     result.status = false;
 
     // check if goal is within bound
-    uint64_t x = std::get<0>(goal);
-    uint64_t y = std::get<1>(goal);
-    if (x < 0 || x >= nx || y < 0 || y >= ny)
+    uint64_t gx = std::get<0>(input->goal);
+    uint64_t gy = std::get<1>(input->goal);
+    if (gx < 0 || gx >= nx || gy < 0 || gy >= ny)
     {
         return result;
     }
@@ -84,32 +88,134 @@ ROAR::global_planning::PotentialFieldPlanResult PotentialFieldPlanning::plan(std
         return result;
     }
 
-    // iteratively find path from start to goal while avoiding obstacles
-    std::vector<std::tuple<uint64_t, uint64_t>> path;
-    x = std::get<0>(*start);
-    y = std::get<1>(*start);
-    path.push_back(*start);
+    // generate costmap
+    std::shared_ptr<std::vector<float>> costmap = p_generateCostMapFromGoal(input->goal);
+    result.costmap = costmap;
 
-    uint64_t iter = 0;
-    while (iter < max_iter) {
-        // check if goal is reached
-        if (x == std::get<0>(goal) && y == std::get<1>(goal))
-        {
-            result.status = true;
-            result.path = path;
-            return result;
-        }
+    // greedy search
+    std::shared_ptr<std::vector<std::tuple<uint64_t, uint64_t>>> path = std::make_shared<std::vector<std::tuple<uint64_t, uint64_t>>>();
 
-        // check if x, y is within bound
-        if (x < 0 || x >= nx || y < 0 || y >= ny)
-        {
-            return result;
-        }
+    p_greedySearch(path, *start, input->goal, max_iter, nx, ny, costmap);
 
-        // do greedy search toward goal while avoiding obstacles
-    }
-
-
+    result.path = path;
     result.status = true;
     return result;
+}
+
+bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tuple<uint64_t, uint64_t>>> path,
+                                            std::tuple<uint64_t, uint64_t> start, std::tuple<uint64_t, uint64_t> goal,
+                                            uint64_t max_iter, uint64_t nx, uint64_t ny,
+                                            const std::shared_ptr<std::vector<float>> costmap)
+{
+    // check if start is within bounds
+    uint64_t x = std::get<0>(start);
+    uint64_t y = std::get<1>(start);
+    if (x < 0 || x >= nx || y < 0 || y >= ny)
+    {
+        return false;
+    }
+
+    // check if goal is within bounds
+    uint64_t gx = std::get<0>(goal);
+    uint64_t gy = std::get<1>(goal);
+    if (gx < 0 || gx >= nx || gy < 0 || gy >= ny)
+    {
+        return false;
+    }
+
+    // check if costmap is valid
+    if (costmap == nullptr)
+    {
+        return false;
+    }
+
+    // check if nx*ny == length of costmap
+    if (nx * ny != costmap->size())
+    {
+        return false;
+    }
+
+    // check if path is valid
+    if (path == nullptr)
+    {
+        return false;
+    }
+
+    if (start == goal)
+    {
+        path->push_back(start);
+        return true;
+    }
+
+    // clear path
+    path->clear();
+
+    // dfs to goal
+    std::stack<uint64_t> stack; // to visit stack
+    stack.push(this->get_index(start));
+
+    // visited map
+    std::vector<bool> visited = std::vector<bool>(nx * ny, false);
+
+    // parent mapping
+    std::map<uint64_t, uint64_t> parent;
+
+    uint64_t iter = 0;
+    while (!stack.empty())
+    {
+        if (iter >= max_iter)
+        {
+            return false;
+        }
+
+        int64_t index = stack.top();
+        stack.pop();
+
+        uint64_t x = index % nx;
+        uint64_t y = index / nx;
+
+        if (std::make_tuple(x, y) == goal)
+        {
+            // Reconstruct the path by backtracking through the parent mapping.
+            while (std::make_tuple(x, y) != start)
+            {
+                path->push_back(std::make_tuple(x, y));
+                uint64_t parent_index = parent[index];
+                x = parent_index % nx;
+                y = parent_index / nx;
+                index = parent_index;
+            }
+            path->push_back(start);
+            std::reverse(path->begin(), path->end()); // Reverse the path to start from the start point.
+            return true;                              // Goal found.
+        }
+
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0)
+                {
+                    continue; // Skip the current cell.
+                }
+
+                uint64_t new_x = x + dx;
+                uint64_t new_y = y + dy;
+
+                if (new_x >= 0 && new_x < nx && new_y >= 0 && new_y < ny)
+                {
+                    uint64_t new_index = get_index(std::make_tuple(new_x, new_y));
+
+                    // if not visited and have lower cost than now
+                    if (!visited[new_index] && (*costmap)[new_index] < (*costmap)[index])
+                    {
+                        stack.push(new_index);
+                        parent[new_index] = index;
+                    }
+                }
+            }
+        }
+
+        iter++;
+    }
 }
