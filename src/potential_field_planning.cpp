@@ -177,12 +177,12 @@ bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tup
         if (std::make_tuple(x, y) == goal)
         {
             // Reconstruct the path by backtracking through the parent mapping.
-            while (std::make_tuple(x, y) != start)
+            std::tuple<uint64_t, uint64_t> coord = std::make_tuple(x, y);
+            while (coord != start)
             {
-                path->push_back(std::make_tuple(x, y));
+                path->push_back(coord);
                 uint64_t parent_index = parent[index];
-                x = parent_index % nx;
-                y = parent_index / nx;
+                coord = getCoordFromIndex(parent_index);
                 index = parent_index;
             }
             path->push_back(start);
@@ -218,4 +218,6 @@ bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tup
 
         iter++;
     }
+
+    return false;
 }

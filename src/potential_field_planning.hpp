@@ -5,6 +5,7 @@
 #include <cmath>
 #include <math.h>
 #include <memory>
+#include <iostream>
 
 namespace ROAR
 {
@@ -55,8 +56,14 @@ namespace ROAR
 
             std::shared_ptr<std::vector<float>> p_generateCostMapFromGoal(std::tuple<uint64_t, uint64_t> goal)
             {
-                uint64_t gx = std::get<0>(goal);
-                uint64_t gy = std::get<1>(goal);
+                int64_t gx = static_cast<int64_t>(std::get<0>(goal));
+                int64_t gy = static_cast<int64_t>(std::get<1>(goal));
+
+                if (gx == -1 || gy == -1)
+                {
+                    // goal is too big
+                    return nullptr;
+                }
 
                 // get copy of existing map
                 std::shared_ptr<std::vector<float>> costmap = std::make_shared<std::vector<float>>(*map_);
@@ -64,12 +71,19 @@ namespace ROAR
                 // map goal cost to all points
                 for (uint64_t i = 0; i < nx * ny; i++)
                 {
-                    uint64_t x = i % nx;
-                    uint64_t y = i / nx;
+                    std::tuple<uint64_t, uint64_t> coord = getCoordFromIndex(i);
                     // distance between x, y and gx, gy
-                    float dx = gx - x;
-                    float dy = gy - y;
+                    int64_t x = static_cast<int64_t>(std::get<0>(coord));
+                    int64_t y = static_cast<int64_t>(std::get<1>(coord));
+
+                    float dx = x - gx;
+                    float dy = y - gy;
+
                     float dist = sqrt(dx * dx + dy * dy);
+
+                    // std::cout << "coord: " << std::get<0>(coord) << ", " << std::get<1>(coord)
+                    //           << " gx: " << gx << " gy: " << gy
+                    //           << " dx: " << dx << " dy: " << dy << " dist raw: " << dx * dx + dy * dy << " dist: " << dist << std::endl;
 
                     (*costmap)[i] += dist;
                 }
@@ -98,6 +112,13 @@ namespace ROAR
                 uint64_t x = std::get<0>(coord);
                 uint64_t y = std::get<1>(coord);
                 return y * nx + x;
+            }
+
+            std::tuple<uint64_t, uint64_t> getCoordFromIndex(uint64_t index)
+            {
+                uint64_t x = index % nx;
+                uint64_t y = index / nx;
+                return std::make_tuple(x, y);
             }
 
         private:
