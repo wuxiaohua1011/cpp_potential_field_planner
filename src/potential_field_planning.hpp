@@ -27,6 +27,7 @@ namespace ROAR
                 typedef std::shared_ptr<PotentialFieldPlanningInput> SharedPtr;
                 std::tuple<uint64_t, uint64_t> goal;
                 uint64_t max_iter = 1000;
+                uint64_t goal_threshold = 0; // distance to goal to consider goal reached
             };
             /**
              * @brief nx, ny: size of the map
@@ -93,7 +94,7 @@ namespace ROAR
             bool p_greedySearch(
                 std::shared_ptr<std::vector<std::tuple<uint64_t, uint64_t>>> path,
                 std::tuple<uint64_t, uint64_t> start, std::tuple<uint64_t, uint64_t> goal,
-                uint64_t max_iter, uint64_t nx, uint64_t ny,
+                uint64_t max_iter, uint64_t nx, uint64_t ny, uint64_t goal_threshold,
                 const std::shared_ptr<std::vector<float>> costmap);
 
             std::vector<float> get_map()
@@ -121,6 +122,16 @@ namespace ROAR
                 return std::make_tuple(x, y);
             }
 
+            bool isWithinGoal(std::tuple<uint64_t, uint64_t> coord, std::tuple<uint64_t, uint64_t> goal, uint64_t goal_threshold)
+            {
+
+                int64_t x = static_cast<int64_t>(std::get<0>(coord));
+                int64_t y = static_cast<int64_t>(std::get<1>(coord));
+                int64_t gx = static_cast<int64_t>(std::get<0>(goal));
+                int64_t gy = static_cast<int64_t>(std::get<1>(goal));
+                return (std::abs(x - gx) <= goal_threshold && std::abs(y - gy) <= goal_threshold);
+            }
+
         private:
             uint64_t nx, ny, max_iter;
             std::shared_ptr<std::tuple<uint64_t, uint64_t>> start;
@@ -129,4 +140,4 @@ namespace ROAR
     }
 }
 
-#endif
+#endif // ROAR__GLOBAL_PLANNING__POTENTIAL_FIELD_HPP

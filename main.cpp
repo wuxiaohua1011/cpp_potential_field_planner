@@ -47,6 +47,7 @@ int main(int, char **)
 
     ROAR::global_planning::PotentialFieldPlanning::PotentialFieldPlanningInput input;
     input.goal = std::make_tuple(9, 9);
+    input.goal_threshold = 1;
     input.max_iter = nx * ny;
     ROAR::global_planning::PotentialFieldPlanning::PotentialFieldPlanningResult result = planner.plan(
         std::make_shared<ROAR::global_planning::PotentialFieldPlanning::PotentialFieldPlanningInput>(input));

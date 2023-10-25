@@ -95,7 +95,7 @@ PotentialFieldPlanning::PotentialFieldPlanningResult PotentialFieldPlanning::pla
     // greedy search
     std::shared_ptr<std::vector<std::tuple<uint64_t, uint64_t>>> path = std::make_shared<std::vector<std::tuple<uint64_t, uint64_t>>>();
 
-    p_greedySearch(path, *start, input->goal, max_iter, nx, ny, costmap);
+    p_greedySearch(path, *start, input->goal, max_iter, nx, ny, input->goal_threshold, costmap);
 
     result.path = path;
     result.status = true;
@@ -104,7 +104,7 @@ PotentialFieldPlanning::PotentialFieldPlanningResult PotentialFieldPlanning::pla
 
 bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tuple<uint64_t, uint64_t>>> path,
                                             std::tuple<uint64_t, uint64_t> start, std::tuple<uint64_t, uint64_t> goal,
-                                            uint64_t max_iter, uint64_t nx, uint64_t ny,
+                                            uint64_t max_iter, uint64_t nx, uint64_t ny, uint64_t goal_threshold,
                                             const std::shared_ptr<std::vector<float>> costmap)
 {
     // check if start is within bounds
@@ -173,11 +173,11 @@ bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tup
 
         uint64_t x = index % nx;
         uint64_t y = index / nx;
+        std::tuple<uint64_t, uint64_t> coord = std::make_tuple(x, y);
 
-        if (std::make_tuple(x, y) == goal)
+        if (this->isWithinGoal(coord, goal, goal_threshold))
         {
             // Reconstruct the path by backtracking through the parent mapping.
-            std::tuple<uint64_t, uint64_t> coord = std::make_tuple(x, y);
             while (coord != start)
             {
                 path->push_back(coord);
