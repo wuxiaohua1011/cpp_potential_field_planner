@@ -1,7 +1,12 @@
 # Potential Field Planning in C++
 
 ## Overview
-
+Features
+- Use priority queue to find the shortest path
+- Goal threshold that simulate real-world uncertainty
+- Obstacle threshold that simulate real-world uncertainty
+- Simple interface
+- 
 
 ## Quick start
 1. `mkdir build && cd build`
