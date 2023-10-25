@@ -3,6 +3,7 @@
 #include <stack>
 #include <map>
 #include <algorithm>
+#include <queue>
 
 using namespace ROAR::global_planning;
 
@@ -18,24 +19,22 @@ PotentialFieldPlanning::~PotentialFieldPlanning()
 {
 }
 
-void PotentialFieldPlanning::setObstacleCoords(std::vector<std::tuple<uint64_t, uint64_t>> obstacle_map, uint64_t bounds, float gradient)
+void PotentialFieldPlanning::setObstacleCoords(std::vector<std::tuple<uint64_t, uint64_t>> obstacle_map)
 {
     // for every x, y, calculate its position on the map, and set the value to 1
+    std::vector<uint8_t> obs_map_linear(nx * ny, 0);
+
+    // set map
+
     for (auto &point : obstacle_map)
     {
-        uint64_t x = std::get<0>(point);
-        uint64_t y = std::get<1>(point);
-        uint64_t index = x + y * nx;
-        // check if index is within bound
-        if (index < 0 || index >= nx * ny)
-        {
-            continue;
-        }
-        (*map_)[index] = 100;
+        uint64_t index = this->get_index(point);
+        obs_map_linear[index] = 100;
     }
+    this->setObstacles(obs_map_linear);
 }
 
-void PotentialFieldPlanning::setObstacles(std::vector<uint8_t> obstacle_map, uint64_t bounds, float gradient)
+void PotentialFieldPlanning::setObstacles(std::vector<uint8_t> obstacle_map)
 {
     // check if obstacle_map is same size as map
     if (obstacle_map.size() != nx * ny)
@@ -45,6 +44,48 @@ void PotentialFieldPlanning::setObstacles(std::vector<uint8_t> obstacle_map, uin
 
     // set map
     map_ = std::make_shared<std::vector<float>>(std::vector<float>(obstacle_map.begin(), obstacle_map.end()));
+}
+
+void PotentialFieldPlanning::inflateObstacles(int radius, float weight)
+{
+    if (this->map_ == nullptr)
+    {
+        throw std::invalid_argument("map is not set");
+    }
+
+    std::vector<uint64_t> obstacle_indices;
+    for (uint64_t i = 0; i < map_->size(); i++)
+    {
+        if ((*map_)[i] > OBSTACLE_THRESHOLD)
+        {
+            obstacle_indices.push_back(i);
+        }
+    }
+
+    // for every obstacle, inflate
+    for (int i = 0; i < obstacle_indices.size(); i++)
+    {
+        uint64_t index = obstacle_indices[i];
+        uint64_t x = index % nx;
+        uint64_t y = index / nx;
+
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                int64_t new_x = x + dx;
+                int64_t new_y = y + dy;
+
+                if (new_x >= 0 && new_x < nx && new_y >= 0 && new_y < ny)
+                {
+                    uint64_t new_index = get_index(std::make_tuple(new_x, new_y));
+                    float distance = sqrt(dx * dx + dy * dy);
+                    float new_value = (*map_)[new_index] + (*map_)[index] * weight / (distance + 1);
+                    (*map_)[new_index] = new_value;
+                }
+            }
+        }
+    }
 }
 
 bool PotentialFieldPlanning::setStart(std::tuple<uint64_t, uint64_t> start)
@@ -151,8 +192,23 @@ bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tup
     path->clear();
 
     // dfs to goal
-    std::stack<uint64_t> stack; // to visit stack
-    stack.push(this->get_index(start));
+
+    // define a priority queue that uses the cost as comparator, and index as value
+    struct potential_field_planning_queue_comparator
+    {
+        const std::vector<float>* costmap;
+
+        potential_field_planning_queue_comparator(const std::vector<float>* costmap) : costmap(costmap) {}
+
+        bool operator()(const uint64_t a, const uint64_t b) const
+        {
+            return costmap->at(a) > costmap->at(b);
+        }
+    };
+    
+    auto comparator = potential_field_planning_queue_comparator(costmap.get());
+    std::priority_queue<uint64_t, std::vector<uint64_t>, decltype(comparator)> pq(comparator);
+    pq.push(this->get_index(start));
 
     // visited map
     std::vector<bool> visited = std::vector<bool>(nx * ny, false);
@@ -161,15 +217,16 @@ bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tup
     std::map<uint64_t, uint64_t> parent;
 
     uint64_t iter = 0;
-    while (!stack.empty())
+    while (!pq.empty())
     {
         if (iter >= max_iter)
         {
             return false;
         }
 
-        int64_t index = stack.top();
-        stack.pop();
+        int64_t index = pq.top();
+        visited[index] = true; // mark as visited
+        pq.pop();
 
         uint64_t x = index % nx;
         uint64_t y = index / nx;
@@ -190,29 +247,17 @@ bool PotentialFieldPlanning::p_greedySearch(std::shared_ptr<std::vector<std::tup
             return true;                              // Goal found.
         }
 
-        for (int dx = -1; dx <= 1; dx++)
+        // get neighbors sorted by cost
+        std::vector<std::tuple<uint64_t, uint64_t>> neighbors = this->getNeighbors(coord);
+
+        // for every neighbor, if not visited and have lower cost than now, add to stack
+        for (auto &neighbor : neighbors)
         {
-            for (int dy = -1; dy <= 1; dy++)
+            uint64_t neighbor_index = this->get_index(neighbor);
+            if (!visited[neighbor_index])
             {
-                if (dx == 0 && dy == 0)
-                {
-                    continue; // Skip the current cell.
-                }
-
-                uint64_t new_x = x + dx;
-                uint64_t new_y = y + dy;
-
-                if (new_x >= 0 && new_x < nx && new_y >= 0 && new_y < ny)
-                {
-                    uint64_t new_index = get_index(std::make_tuple(new_x, new_y));
-
-                    // if not visited and have lower cost than now
-                    if (!visited[new_index] && (*costmap)[new_index] < (*costmap)[index])
-                    {
-                        stack.push(new_index);
-                        parent[new_index] = index;
-                    }
-                }
+                pq.push(neighbor_index);
+                parent[neighbor_index] = index;
             }
         }
 

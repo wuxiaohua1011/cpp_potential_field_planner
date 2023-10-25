@@ -33,15 +33,22 @@ int main(int, char **)
 
     // set obstacles
     std::vector<std::tuple<uint64_t, uint64_t>> obstacle_map = {
-        std::make_tuple(1, 1),
         std::make_tuple(2, 2),
         std::make_tuple(3, 3),
         std::make_tuple(4, 4),
-        std::make_tuple(5, 5)};
-    planner.setObstacleCoords(obstacle_map, 100, 1);
+        std::make_tuple(5, 5),
+        std::make_tuple(7, 7),
+    };
+    planner.setObstacleCoords(obstacle_map);
 
     // print map after
     std::cout << "Map With Obstacle: " << std::endl;
+    map = planner.get_map();
+    p_printMap(map, nx, ny);
+
+    // inflate
+    planner.inflateObstacles(2, 0.25);
+    std::cout << "Map With Obstacle inflated: " << std::endl;
     map = planner.get_map();
     p_printMap(map, nx, ny);
 

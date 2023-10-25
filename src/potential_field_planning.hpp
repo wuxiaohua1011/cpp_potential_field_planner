@@ -11,6 +11,7 @@ namespace ROAR
 {
     namespace global_planning
     {
+        static const float OBSTACLE_THRESHOLD = 50.0;
 
         class PotentialFieldPlanning
         {
@@ -39,10 +40,12 @@ namespace ROAR
              * @brief obstacle_map: a list of tuples of (x, y) coordinates of obstacles
              * @return void
              */
-            void setObstacleCoords(std::vector<std::tuple<uint64_t, uint64_t>> obstacle_map, uint64_t bounds, float gradient);
+            void setObstacleCoords(std::vector<std::tuple<uint64_t, uint64_t>> obstacle_map);
 
-            void setObstacles(std::vector<uint8_t> obstacle_map, uint64_t bounds, float gradient);
+            void setObstacles(std::vector<uint8_t> obstacle_map);
 
+            // @brief inflate obstacle by radius, with each layer of obstacle having weight of weight/radius
+            void inflateObstacles(int radius, float weight);
             /**
              * @brief start: a tuple of (x, y) coordinates of the start point
              * @return bool: true if the start point is valid, false otherwise
@@ -130,6 +133,38 @@ namespace ROAR
                 int64_t gx = static_cast<int64_t>(std::get<0>(goal));
                 int64_t gy = static_cast<int64_t>(std::get<1>(goal));
                 return (std::abs(x - gx) <= goal_threshold && std::abs(y - gy) <= goal_threshold);
+            }
+
+            std::vector<std::tuple<uint64_t, uint64_t>> getNeighbors(std::tuple<uint64_t, uint64_t> coord)
+            {
+                std::vector<std::tuple<uint64_t, uint64_t>> neighbors;
+                int64_t x = static_cast<int64_t>(std::get<0>(coord));
+                int64_t y = static_cast<int64_t>(std::get<1>(coord));
+
+                // check if within bounds
+                if (x < 0 || x >= nx || y < 0 || y >= ny)
+                {
+                    return neighbors;
+                }
+
+                // check if within bounds
+                if (x - 1 >= 0)
+                {
+                    neighbors.push_back(std::make_tuple(x - 1, y));
+                }
+                if (x + 1 < nx)
+                {
+                    neighbors.push_back(std::make_tuple(x + 1, y));
+                }
+                if (y - 1 >= 0)
+                {
+                    neighbors.push_back(std::make_tuple(x, y - 1));
+                }
+                if (y + 1 < ny)
+                {
+                    neighbors.push_back(std::make_tuple(x, y + 1));
+                }
+                return neighbors;
             }
 
         private:
